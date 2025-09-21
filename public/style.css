@@ -1,0 +1,15 @@
+*{box-sizing:border-box}body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#0b1220;color:#e6ecff}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;background:#0f172a;border-bottom:1px solid #1f2a44}
+h1{font-size:20px;margin:0}
+.user a{color:#93c5fd}
+main{max-width:1000px;margin:24px auto;padding:0 16px;display:grid;gap:16px}
+.card{background:#0f172a;border:1px solid #1f2a44;border-radius:14px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.guild{padding:14px;border:1px solid #23314f;border-radius:12px;background:#111a2e;cursor:pointer;transition:.15s}
+.guild:hover{transform:translateY(-2px);border-color:#33528f}
+label{display:block;margin:10px 0 6px;font-weight:600;font-size:14px}
+input,select,button{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #263453;background:#0d1526;color:#e6ecff}
+button{cursor:pointer;margin-top:10px}
+button.danger{border-color:#7f1d1d;color:#fecaca}
+.row{display:flex;gap:10px}
+#status{margin-top:8px;color:#93c5fd}

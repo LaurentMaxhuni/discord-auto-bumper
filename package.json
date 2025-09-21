@@ -1,0 +1,22 @@
+{
+  "name": "discord-bump-dashboard",
+  "version": "1.0.0",
+  "description": "Discord bot with a web dashboard to configure per-guild bump channels and interval.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "express-session": "^1.17.3"
+  }
+}
