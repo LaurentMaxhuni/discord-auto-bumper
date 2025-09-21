@@ -1,8 +1,9 @@
 # Discord Bump Bot
 
 Minimal Discord.js bot with:
-- `/bump` slash command
-- automatic message every 2 hours in a chosen channel
+- `/bump` slash command proxy that relays to a partner bot (e.g. DISBOARD)
+- automatic triggering every few hours in a chosen channel
+- OAuth-powered dashboard to configure schedules and fire bumps instantly
 
 ## Setup
 
@@ -15,8 +16,12 @@ Minimal Discord.js bot with:
 ```
 DISCORD_BOT_TOKEN=YOUR_BOT_TOKEN
 CLIENT_ID=YOUR_APPLICATION_ID
-GUILD_ID=YOUR_TEST_GUILD_ID
-CHANNEL_ID=YOUR_TARGET_CHANNEL_ID
+CLIENT_SECRET=YOUR_OAUTH_SECRET
+REDIRECT_URI=http://localhost:3000/callback
+SESSION_SECRET=super-secret-session-key
+# Optional overrides:
+# BUMP_APPLICATION_ID=302050872383242240 (DISBOARD default)
+# BUMP_COMMAND_NAME=bump
 ```
 
 3. **Install**
@@ -24,19 +29,15 @@ CHANNEL_ID=YOUR_TARGET_CHANNEL_ID
 npm i
 ```
 
-4. **Register commands** (guild-scoped for instant availability)
-```
-npm run deploy
-```
-
-5. **Run**
+4. **Run**
 ```
 npm start
 ```
 
-6. **Use**
-- Type `/bump` in your test guild.
-- The bot will also send "Bumped! 🚀" to `CHANNEL_ID` every 2 hours.
+5. **Use**
+- Visit http://localhost:3000/login and sign in with Discord.
+- Pick a guild, select the bump channel and cadence, then hit **Trigger /bump** to relay the partner bot's command.
+- Automatic bumps reuse the same channel and interval you configure in the dashboard.
 
 ## Notes
 - Node 18+ recommended.
