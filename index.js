@@ -66,9 +66,34 @@ const readyPromise = new Promise((resolve) => {
   resolveReady = resolve;
 });
 
+let latestSessionId = null;
+let resolveSessionReady;
+const sessionReadyPromise = new Promise((resolve) => {
+  resolveSessionReady = resolve;
+});
+
+function markSessionReady(sessionId) {
+  if (!sessionId) return;
+  latestSessionId = sessionId;
+  resolveSessionReady?.(sessionId);
+  resolveSessionReady = null;
+}
 function ensureClientReady() {
   if (client.isReady()) return Promise.resolve();
   return readyPromise;
+}
+
+async function ensureGatewaySession() {
+  await ensureClientReady();
+  if (latestSessionId) return latestSessionId;
+  const immediate = client.ws.shards.first()?.sessionId ?? null;
+  if (immediate) {
+    markSessionReady(immediate);
+    return immediate;
+  }
+  const awaited = await sessionReadyPromise;
+  if (awaited) return awaited;
+  throw new Error("Bot gateway session not ready yet");
 }
 
 // Schedule management
@@ -186,11 +211,7 @@ async function fetchExternalBumpCommand(guildId) {
 }
 
 async function executeExternalBump(guildId, channelId) {
-  const sessionId = [...client.ws.shards.values()][0]?.sessionId;
-  if (!sessionId) {
-    throw new Error("Bot gateway session not ready yet");
-  }
-
+  const sessionId = await ensureGatewaySession();
   const command = await fetchExternalBumpCommand(guildId);
 
   const response = await fetch("https://discord.com/api/v10/interactions", {
@@ -263,8 +284,17 @@ function scheduleGuild(guildId) {
 // Bring up schedules on ready
 client.once(Events.ClientReady, () => {
   console.log(`Ready as ${client.user.tag}`);
+  markSessionReady(client.ws.shards.first()?.sessionId ?? null);
   Object.keys(config).forEach((gid) => scheduleGuild(gid));
   resolveReady?.();
+});
+
+client.on(Events.ShardReady, (shardId) => {
+  markSessionReady(client.ws.shards.get(shardId)?.sessionId ?? null);
+});
+
+client.on(Events.ShardResume, (shardId) => {
+  markSessionReady(client.ws.shards.get(shardId)?.sessionId ?? null);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -369,6 +399,18 @@ app.get("/dashboard", loginRequired, (req, res) => {
 });
 
 // API: list manageable guilds where the bot is present
+function buildBotInviteUrl(guildId) {
+  const url = new URL(OAUTH_AUTHORIZE);
+  url.searchParams.set("client_id", CLIENT_ID);
+  url.searchParams.set("scope", "bot applications.commands");
+  url.searchParams.set("permissions", String(2048));
+  if (guildId) {
+    url.searchParams.set("guild_id", guildId);
+    url.searchParams.set("disable_guild_select", "true");
+  }
+  return url.toString();
+}
+
 app.get("/api/guilds", loginRequired, async (req, res) => {
   try {
     await ensureClientReady();
@@ -382,13 +424,14 @@ app.get("/api/guilds", loginRequired, async (req, res) => {
     const manageable = userGuilds
       .filter(
         (g) =>
-          botGuildIds.has(g.id) &&
-          (g.owner || (g.permissions & MANAGE_GUILD) === MANAGE_GUILD)
+          g && (g.owner || (g.permissions & MANAGE_GUILD) === MANAGE_GUILD)
       )
       .map((g) => ({
         id: g.id,
         name: g.name,
         icon: g.icon,
+        installed: botGuildIds.has(g.id),
+        inviteUrl: buildBotInviteUrl(g.id),
       }));
     res.json({ guilds: manageable, config });
   } catch (e) {
