@@ -121,8 +121,12 @@
         messageEl.value = cfg.message || 'Bumped! 🚀';
       }
 
-      bumpBtn.disabled = !(cfg && cfg.channelId);
+      bumpBtn.disabled = !channelsEl.value;
     }
+
+    channelsEl.onchange = () => {
+      bumpBtn.disabled = !channelsEl.value;
+    };
 
     saveBtn.onclick = async () => {
       if (!selectedGuild) return;
@@ -138,7 +142,7 @@
       if (data.ok) {
         selectedConfig = data.config;
         renderStatus('success', 'Schedule saved!', 'Your bump schedule is active and will use the external /bump command.');
-        bumpBtn.disabled = false;
+        bumpBtn.disabled = !channelsEl.value;
       } else {
         renderStatus('error', 'Save failed', data.error || 'Please try again.');
       }
@@ -151,7 +155,7 @@
       const data = await r.json();
       if (data.ok) {
         selectedConfig = null;
-        bumpBtn.disabled = true;
+        bumpBtn.disabled = !channelsEl.value;
         renderStatus('success', 'Schedule removed', 'Automation is turned off for this server.');
       } else {
         renderStatus('error', 'Removal failed', data.error || 'Please try again.');
@@ -160,12 +164,17 @@
 
     bumpBtn.onclick = async () => {
       if (!selectedGuild) return;
+      const selectedChannel = channelsEl.value;
+      if (!selectedChannel) {
+        renderStatus('error', 'Channel required', 'Choose the channel you would like to send /bump in.');
+        return;
+      }
       renderStatus('info', 'Triggering bump…', 'We are relaying the /bump command to the partner bot.');
       try {
         const r = await fetch('/api/bump', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ guildId: selectedGuild.id })
+          body: JSON.stringify({ guildId: selectedGuild.id, channelId: selectedChannel })
         });
         const data = await r.json();
         if (data.ok) {

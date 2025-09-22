@@ -66,6 +66,30 @@ const client = new Client({
 const intervals = new Map();
 const bumpCommandCache = new Map();
 
+async function resolveTextChannel(guildId, channelId) {
+  let guild;
+  try {
+    guild = await client.guilds.fetch(guildId);
+  } catch (err) {
+    throw new Error("Bot is not in this guild or cannot access it.");
+  }
+
+  let channel;
+  try {
+    channel = await guild.channels.fetch(channelId);
+  } catch (err) {
+    throw new Error("Unable to access the selected channel.");
+  }
+
+  if (
+    !channel ||
+    !(channel.type === ChannelType.GuildText || channel.isTextBased())
+  ) {
+    throw new Error("Selected channel is not a text channel.");
+  }
+
+  return channel;
+}
 async function fetchExternalBumpCommand(guildId) {
   if (!BUMP_APPLICATION_ID) {
     throw new Error("Missing BUMP_APPLICATION_ID env var");
@@ -342,6 +366,13 @@ app.post("/api/save", loginRequired, async (req, res) => {
   const { guildId, channelId, intervalMinutes, message } = req.body || {};
   if (!guildId || !channelId)
     return res.status(400).json({ error: "guildId and channelId required" });
+
+  try {
+    await resolveTextChannel(guildId, channelId);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
   config[guildId] = {
     channelId,
     intervalMinutes:
@@ -367,18 +398,20 @@ app.post("/api/remove", loginRequired, async (req, res) => {
 
 // API: trigger bump command immediately
 app.post("/api/bump", loginRequired, async (req, res) => {
-  const { guildId } = req.body || {};
+  const { guildId, channelId } = req.body || {};
   if (!guildId) return res.status(400).json({ error: "guildId required" });
 
   const entry = config[guildId];
-  if (!entry?.channelId) {
+  const targetChannel = channelId || entry?.channelId;
+  if (!targetChannel) {
     return res
       .status(400)
       .json({ error: "No channel configured for this guild." });
   }
 
   try {
-    await executeExternalBump(guildId, entry.channelId);
+    await resolveTextChannel(guildId, targetChannel);
+    await executeExternalBump(guildId, targetChannel);
     res.json({ ok: true, message: "Bump command executed successfully!" });
   } catch (err) {
     const rawMessage = err?.rawError?.message || err?.message || "";
