@@ -123,6 +123,11 @@ async function executeExternalBump(guildId, channelId) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      type: 2,
+      application_id: BUMP_APPLICATION_ID,
+      guild_id: guildId,
+      channel_id: channelId,
+      session_id: sessionId,
       nonce: Date.now().toString(),
       data: {
         id: command.id,
@@ -149,8 +154,6 @@ async function executeExternalBump(guildId, channelId) {
     error.rawError = details;
     throw error;
   }
-    },
-  });
 }
 
 async function sendBump(guildId) {
@@ -210,7 +213,21 @@ function loginRequired(req, res, next) {
 
 // Routes
 app.get("/", (req, res) => {
-  res.redirect("/dashboard");
+  res.render("landing", {
+    user: req.session.user || null,
+  });
+});
+
+app.get("/terms", (req, res) => {
+  res.render("terms", {
+    user: req.session.user || null,
+  });
+});
+
+app.get("/privacy", (req, res) => {
+  res.render("privacy", {
+    user: req.session.user || null,
+  });
 });
 
 app.get("/login", (req, res) => {

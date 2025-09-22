@@ -6,10 +6,18 @@
   <title>Discord Bump Dashboard</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <header>
-    <h1>Discord Bump Dashboard</h1>
-    <div class="user">Logged in as <strong><%= user.username %></strong> | <a href="/logout">Logout</a></div>
+<body class="dashboard">
+  <header class="topbar">
+    <a class="brand" href="/">AutoBump</a>
+    <nav class="nav-links">
+      <a href="/">Home</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    <div class="user">
+      <span class="chip">Logged in as <strong><%= user.username %></strong></span>
+      <a class="btn small secondary" href="/logout">Logout</a>
+    </div>
   </header>
 
   <main>
