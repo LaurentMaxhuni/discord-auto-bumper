@@ -116,13 +116,14 @@ async function executeExternalBump(guildId, channelId) {
 
   const command = await fetchExternalBumpCommand(guildId);
 
-  await client.rest.post(Routes.interactions(), {
-    body: {
-      type: 2,
-      application_id: BUMP_APPLICATION_ID,
-      guild_id: guildId,
-      channel_id: channelId,
-      session_id: sessionId,
+  const response = await fetch("https://discord.com/api/v10/interactions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      nonce: Date.now().toString(),
       data: {
         id: command.id,
         type: command.type,
@@ -131,6 +132,23 @@ async function executeExternalBump(guildId, channelId) {
         options: [],
         attachments: [],
       },
+    }),
+  });
+
+  if (!response.ok) {
+    let details = null;
+    try {
+      details = await response.json();
+    } catch (e) {
+      // ignore json parse issues
+    }
+    const error = new Error(
+      details?.message || `Discord API error ${response.status}`
+    );
+    error.status = response.status;
+    error.rawError = details;
+    throw error;
+  }
     },
   });
 }
