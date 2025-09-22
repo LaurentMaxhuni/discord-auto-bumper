@@ -6,34 +6,55 @@
   <title>Discord Bump Dashboard</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <header>
-    <h1>Discord Bump Dashboard</h1>
-    <div class="user">Logged in as <strong><%= user.username %></strong> | <a href="/logout">Logout</a></div>
+<body class="dashboard">
+  <header class="topbar">
+    <a class="brand" href="/">AutoBump</a>
+    <nav class="nav-links">
+      <a href="/">Home</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    <div class="user">
+      <span class="chip">Logged in as <strong><%= user.username %></strong></span>
+      <a class="btn small secondary" href="/logout">Logout</a>
+    </div>
   </header>
 
   <main>
     <section class="card">
-      <h2>Pick a server</h2>
+      <div class="card-heading">
+        <div>
+          <h2>Servers</h2>
+          <p class="muted">Select a server to adjust scheduling and trigger bumps instantly.</p>
+        </div>
+      </div>
       <div id="guilds" class="grid"></div>
     </section>
 
     <section class="card" id="config-section" hidden>
-      <h2 id="guildTitle">Configure</h2>
-      <label>Channel
-        <select id="channels"></select>
-      </label>
-      <label>Interval (minutes)
-        <input id="interval" type="number" min="1" value="120">
-      </label>
-      <label>Message
-        <input id="message" type="text" maxlength="2000" value="Bumped! 🚀">
-      </label>
+      <div class="card-heading">
+        <div>
+          <h2 id="guildTitle">Configure</h2>
+          <p class="muted">Fine tune automation, then launch the partner bot's /bump right from here.</p>
+        </div>
+        <button id="bumpBtn" class="accent" disabled>Trigger /bump</button>
+      </div>
+      <div class="field-grid">
+        <label>Channel
+          <select id="channels"></select>
+        </label>
+        <label>Interval (minutes)
+          <input id="interval" type="number" min="1" value="120">
+        </label>
+        <label>Message
+          <input id="message" type="text" maxlength="2000" value="Bumped! 🚀">
+        </label>
+      </div>
       <div class="row">
-        <button id="saveBtn">Save</button>
+        <button id="saveBtn">Save Schedule</button>
         <button id="removeBtn" class="danger">Remove Schedule</button>
       </div>
-      <div id="status"></div>
+      <div id="status" class="status"></div>
     </section>
   </main>
 
@@ -46,8 +67,23 @@
     const messageEl = document.getElementById('message');
     const saveBtn = document.getElementById('saveBtn');
     const removeBtn = document.getElementById('removeBtn');
+    const bumpBtn = document.getElementById('bumpBtn');
     const statusEl = document.getElementById('status');
     let selectedGuild = null;
+    let selectedConfig = null;
+
+    function renderStatus(variant, title, description = '') {
+      statusEl.innerHTML = `
+        <div class="embed embed--${variant}">
+          <div class="embed-title">${title}</div>
+          ${description ? `<div class="embed-desc">${description}</div>` : ''}
+        </div>
+      `;
+    }
+
+    function clearStatus() {
+      statusEl.innerHTML = '';
+    }
 
     async function loadGuilds() {
       const r = await fetch('/api/guilds');
@@ -64,9 +100,10 @@
 
     async function selectGuild(g, cfg) {
       selectedGuild = g;
+      selectedConfig = cfg || null;
       guildTitle.textContent = 'Configure: ' + (g.name || g.id);
       configSection.hidden = false;
-      statusEl.textContent = '';
+      clearStatus();
 
       const rc = await fetch('/api/channels?guild_id=' + g.id);
       const data = await rc.json();
@@ -83,6 +120,8 @@
         intervalEl.value = cfg.intervalMinutes || 120;
         messageEl.value = cfg.message || 'Bumped! 🚀';
       }
+
+      bumpBtn.disabled = !(cfg && cfg.channelId);
     }
 
     saveBtn.onclick = async () => {
@@ -93,16 +132,55 @@
         intervalMinutes: Number(intervalEl.value) || 120,
         message: messageEl.value
       };
+      renderStatus('info', 'Saving configuration…', 'Updating your automatic bump schedule.');
       const r = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await r.json();
-      statusEl.textContent = data.ok ? 'Saved ✅' : 'Failed ❌';
+      if (data.ok) {
+        selectedConfig = data.config;
+        renderStatus('success', 'Schedule saved!', 'Your bump schedule is active and will use the external /bump command.');
+        bumpBtn.disabled = false;
+      } else {
+        renderStatus('error', 'Save failed', data.error || 'Please try again.');
+      }
     };
 
     removeBtn.onclick = async () => {
       if (!selectedGuild) return;
+      renderStatus('info', 'Removing schedule…');
       const r = await fetch('/api/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guildId: selectedGuild.id }) });
       const data = await r.json();
-      statusEl.textContent = data.ok ? 'Removed ✅' : 'Failed ❌';
+      if (data.ok) {
+        selectedConfig = null;
+        bumpBtn.disabled = true;
+        renderStatus('success', 'Schedule removed', 'Automation is turned off for this server.');
+      } else {
+        renderStatus('error', 'Removal failed', data.error || 'Please try again.');
+      }
+    };
+
+    bumpBtn.onclick = async () => {
+      if (!selectedGuild) return;
+      renderStatus('info', 'Triggering bump…', 'We are relaying the /bump command to the partner bot.');
+      try {
+        const r = await fetch('/api/bump', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ guildId: selectedGuild.id })
+        });
+        const data = await r.json();
+        if (data.ok) {
+          renderStatus('success', 'Bump command executed successfully!');
+        } else if (data.cooldown) {
+          const embed = data.embed || {};
+          renderStatus('warning', embed.title || 'Cooldown in effect', embed.description || 'The partner bot reported a cooldown.');
+        } else {
+          const embed = data.embed || {};
+          renderStatus('error', embed.title || 'Bump command failed', embed.description || 'Please check the bot permissions and try again.');
+        }
+      } catch (err) {
+        console.error(err);
+        renderStatus('error', 'Unexpected error', 'Something went wrong while calling /bump.');
+      }
     };
 
     loadGuilds();
