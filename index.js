@@ -123,11 +123,6 @@ async function executeExternalBump(guildId, channelId) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      type: 2,
-      application_id: BUMP_APPLICATION_ID,
-      guild_id: guildId,
-      channel_id: channelId,
-      session_id: sessionId,
       nonce: Date.now().toString(),
       data: {
         id: command.id,
@@ -154,6 +149,8 @@ async function executeExternalBump(guildId, channelId) {
     error.rawError = details;
     throw error;
   }
+    },
+  });
 }
 
 async function sendBump(guildId) {
