@@ -78,7 +78,6 @@ function markSessionReady(sessionId) {
   resolveSessionReady?.(sessionId);
   resolveSessionReady = null;
 }
-
 function ensureClientReady() {
   if (client.isReady()) return Promise.resolve();
   return readyPromise;
