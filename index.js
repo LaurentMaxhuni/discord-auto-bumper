@@ -90,7 +90,6 @@ async function resolveTextChannel(guildId, channelId) {
 
   return channel;
 }
-
 async function fetchExternalBumpCommand(guildId) {
   if (!BUMP_APPLICATION_ID) {
     throw new Error("Missing BUMP_APPLICATION_ID env var");
