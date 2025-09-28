@@ -299,8 +299,52 @@ client.on(Events.ShardResume, (shardId) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName === "bump") {
-    await interaction.reply("Bumped! 🚀");
+  if (interaction.commandName !== "bump") return;
+
+  if (!interaction.guildId) {
+    await interaction.reply({
+      content: "This command can only be used inside a server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const requestedChannel = interaction.options.getChannel?.("channel") ?? null;
+  const entry = config[interaction.guildId];
+  const targetChannelId = requestedChannel?.id ?? entry?.channelId ?? null;
+
+  if (!targetChannelId) {
+    await interaction.reply({
+      content:
+        "No bump channel configured for this server. Set one from the dashboard or provide a channel option.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    await ensureClientReady();
+    await resolveTextChannel(interaction.guildId, targetChannelId);
+    await executeExternalBump(interaction.guildId, targetChannelId);
+
+    await interaction.editReply({
+      content: `Triggered /${BUMP_COMMAND_NAME} in <#${targetChannelId}>!`,
+    });
+  } catch (err) {
+    console.error("Slash bump failed:", err);
+    const rawMessage = err?.rawError?.message || err?.message || "";
+    const isCooldown =
+      err?.status === 429 || /cooldown|try again/i.test(rawMessage);
+    const { message } = normalizeDiscordError(err);
+    const description = isCooldown
+      ? "Failed to execute bump command: Cooldown in effect."
+      : message || "Failed to execute bump command.";
+
+    await interaction.editReply({
+      content: description,
+    });
   }
 });
 
