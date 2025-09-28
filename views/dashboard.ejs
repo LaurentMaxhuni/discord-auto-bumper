@@ -118,15 +118,6 @@
       guildTitle.textContent = 'Configure: ' + (g.name || g.id);
       configSection.hidden = false;
       clearStatus();
-      const rc = await fetch('/api/channels?guild_id=' + g.id);
-      const data = await rc.json();
-      channelsEl.innerHTML = '';
-      data.channels.forEach(ch => {
-        const opt = document.createElement('option');
-        opt.value = ch.id;
-        opt.textContent = ch.name;
-        channelsEl.appendChild(opt);
-      });
 
       if (!g.installed) {
         setConfigDisabled(true);
@@ -172,11 +163,9 @@
         bumpBtn.disabled = !channelsEl.value;
       } catch (err) {
         renderStatus('error', 'Channel load failed', err.message || 'Please try again later.');
+        bumpBtn.disabled = true;
       }
-
-      bumpBtn.disabled = !channelsEl.value;
     }
-
     channelsEl.onchange = () => {
       if (!channelsEl.disabled) {
         bumpBtn.disabled = !channelsEl.value;
