@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoBump | Terms of Service</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="legal">
+  <header class="topbar">
+    <a class="brand" href="/">AutoBump</a>
+    <nav class="nav-links">
+      <a href="/">Home</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    <div class="auth">
+      <% if (user) { %>
+        <span class="chip">Signed in as <strong><%= user.username %></strong></span>
+        <a class="btn small secondary" href="/dashboard">Open Dashboard</a>
+      <% } else { %>
+        <a class="btn small" href="/login">Login with Discord</a>
+      <% } %>
+    </div>
+  </header>
+
+  <main>
+    <article class="legal-card">
+      <h1>Terms of Service</h1>
+      <p>These Terms of Service ("Terms") govern your access to and use of the AutoBump dashboard, automation bot, and any related services (collectively, the "Service"). By using the Service you agree to be bound by these Terms.</p>
+
+      <h2>1. Eligibility</h2>
+      <p>You must comply with Discord&rsquo;s Terms of Service and Community Guidelines. You are responsible for ensuring that AutoBump is only connected to servers where you have permission to manage integrations.</p>
+
+      <h2>2. Acceptable use</h2>
+      <ul>
+        <li>Do not interfere with or abuse the Service, Discord&rsquo;s APIs, or the partner bump bot.</li>
+        <li>Do not attempt to reverse engineer, redistribute, or resell the Service.</li>
+        <li>Do not use the Service to automate actions that violate Discord or partner bot rules.</li>
+      </ul>
+
+      <h2>3. Scheduling and automation</h2>
+      <p>You acknowledge that bump scheduling relies on the availability and uptime of Discord and the partner bump bot. AutoBump relays commands on your behalf but cannot guarantee successful execution if upstream services are unavailable or enforce cooldowns.</p>
+
+      <h2>4. Data ownership</h2>
+      <p>You retain ownership of your Discord account, servers, and any messages you author. AutoBump stores minimal configuration data—such as selected guilds, channel IDs, and interval preferences—to provide the Service.</p>
+
+      <h2>5. Termination</h2>
+      <p>We may suspend or terminate access to the Service at any time if you breach these Terms or if continued operation is no longer commercially reasonable. You may stop using the Service at any time by removing the bot and deleting stored schedules.</p>
+
+      <h2>6. Disclaimer</h2>
+      <p>The Service is provided "as is" without warranties of any kind. We disclaim all implied warranties, including merchantability, fitness for a particular purpose, and non-infringement.</p>
+
+      <h2>7. Limitation of liability</h2>
+      <p>To the maximum extent permitted by law, AutoBump shall not be liable for indirect, incidental, consequential, or punitive damages, or any loss of profits or data, arising from your use of the Service.</p>
+
+      <h2>8. Changes to these Terms</h2>
+      <p>We may modify these Terms from time to time. Updates will be posted on this page with a revised "Last updated" date. Continued use of the Service after changes become effective constitutes acceptance of the revised Terms.</p>
+
+      <p><strong>Last updated:</strong> <%= new Date().toLocaleDateString() %></p>
+    </article>
+  </main>
+
+  <footer>
+    &copy; <%= new Date().getFullYear() %> AutoBump. All rights reserved. &bull;
+    <a href="/terms">Terms of Service</a> &bull;
+    <a href="/privacy">Privacy Policy</a>
+  </footer>
+</body>
+</html>

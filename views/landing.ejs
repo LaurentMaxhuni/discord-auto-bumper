@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoBump | Discord Bump Automation</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="landing">
+  <header class="topbar">
+    <a class="brand" href="/">AutoBump</a>
+    <nav class="nav-links">
+      <a href="/">Home</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    <div class="auth">
+      <% if (user) { %>
+        <span class="chip">Signed in as <strong><%= user.username %></strong></span>
+        <a class="btn small secondary" href="/dashboard">Open Dashboard</a>
+      <% } else { %>
+        <a class="btn small" href="/login">Login with Discord</a>
+      <% } %>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="eyebrow">Automated Discord Growth</div>
+      <h1>Keep your server trending with effortless bump automation.</h1>
+      <p>
+        AutoBump relays the partner bot's <code>/bump</code> command on schedule or on-demand.
+        No custom slash commands to maintain—just a streamlined dashboard, instant cooldown-aware feedback,
+        and a gorgeous interface your staff will love.
+      </p>
+      <div class="cta-buttons">
+        <a class="btn" href="<%= user ? '/dashboard' : '/login' %>">Launch dashboard</a>
+        <a class="btn secondary" href="#how-it-works">How it works</a>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="section-title">Why community managers pick AutoBump</h2>
+      <p class="section-subtitle">Purpose-built tooling for server discovery teams that demand reliability, clarity, and polish.</p>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <h3>Slash command proxy</h3>
+          <p>Trigger the partner bot&rsquo;s <code>/bump</code> command directly—no brittle mirrors or extra permissions required.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Cooldown awareness</h3>
+          <p>Beautiful embed-style messaging keeps staff informed with instant feedback when the partner bot reports a cooldown.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Adaptive scheduling</h3>
+          <p>Configure per-guild cadence, channels, and custom confirmation copy in seconds through the responsive dashboard.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Battle-tested</h3>
+          <p>Designed for high traffic scenarios with graceful handling, resilient caching, and transparent error reporting.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="gradient-card">
+      <div class="eyebrow">How it works</div>
+      <h2 class="section-title">Launch in three simple steps</h2>
+      <ul class="steps">
+        <li><strong>Connect with Discord.</strong> Authorize AutoBump to access your guilds using OAuth2 in one secure flow.</li>
+        <li><strong>Pick a channel &amp; cadence.</strong> Choose where <code>/bump</code> should run and fine tune the interval for each community.</li>
+        <li><strong>Monitor success.</strong> Relay bumps instantly, get cooldown alerts in the dashboard, and keep your listings on top.</li>
+      </ul>
+      <div class="cta-buttons">
+        <a class="btn" href="<%= user ? '/dashboard' : '/login' %>">Get started</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    &copy; <%= new Date().getFullYear() %> AutoBump. All rights reserved. &bull;
+    <a href="/terms">Terms of Service</a> &bull;
+    <a href="/privacy">Privacy Policy</a>
+  </footer>
+</body>
+</html>

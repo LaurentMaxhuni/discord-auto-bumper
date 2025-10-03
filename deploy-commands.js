@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { REST, Routes, SlashCommandBuilder, ChannelType } from 'discord.js';
 
 const { DISCORD_BOT_TOKEN, CLIENT_ID, GUILD_ID } = process.env;
 
@@ -11,7 +11,14 @@ if (!DISCORD_BOT_TOKEN || !CLIENT_ID) {
 const commands = [
   new SlashCommandBuilder()
     .setName('bump')
-    .setDescription('Bump now.')
+    .setDescription('Trigger the Disboard bump command in a channel.')
+    .addChannelOption((option) =>
+      option
+        .setName('channel')
+        .setDescription('Channel to trigger the Disboard bump command in.')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    )
     .toJSON()
 ];
 

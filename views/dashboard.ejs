@@ -6,10 +6,18 @@
   <title>Discord Bump Dashboard</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <header>
-    <h1>Discord Bump Dashboard</h1>
-    <div class="user">Logged in as <strong><%= user.username %></strong> | <a href="/logout">Logout</a></div>
+<body class="dashboard">
+  <header class="topbar">
+    <a class="brand" href="/">AutoBump</a>
+    <nav class="nav-links">
+      <a href="/">Home</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    <div class="user">
+      <span class="chip">Logged in as <strong><%= user.username %></strong></span>
+      <a class="btn small secondary" href="/logout">Logout</a>
+    </div>
   </header>
 
   <main>
@@ -77,6 +85,17 @@
       statusEl.innerHTML = '';
     }
 
+    function setConfigDisabled(disabled) {
+      [channelsEl, intervalEl, messageEl].forEach(el => {
+        el.disabled = disabled;
+      });
+      saveBtn.disabled = disabled;
+      removeBtn.disabled = disabled;
+      if (disabled) {
+        bumpBtn.disabled = true;
+      }
+    }
+
     async function loadGuilds() {
       const r = await fetch('/api/guilds');
       const data = await r.json();
@@ -115,15 +134,35 @@
       configSection.hidden = false;
       clearStatus();
 
-      const rc = await fetch('/api/channels?guild_id=' + g.id);
-      const data = await rc.json();
-      channelsEl.innerHTML = '';
-      data.channels.forEach(ch => {
-        const opt = document.createElement('option');
-        opt.value = ch.id;
-        opt.textContent = ch.name;
-        channelsEl.appendChild(opt);
-      });
+      if (!g.installed) {
+        setConfigDisabled(true);
+        channelsEl.innerHTML = '';
+        intervalEl.value = cfg?.intervalMinutes || 120;
+        messageEl.value = cfg?.message || 'Bumped! 🚀';
+        renderStatus(
+          'warning',
+          'Add AutoBump to continue',
+          `This server doesn't have the AutoBump bot yet. <a href="${g.inviteUrl}" target="_blank" rel="noopener">Invite the bot</a> to relay the /bump command.`
+        );
+        return;
+      }
+
+      setConfigDisabled(true);
+      renderStatus('info', 'Loading channels…', 'Retrieving text channels where the bot can run /bump.');
+      try {
+        const rc = await fetch('/api/channels?guild_id=' + g.id);
+        if (!rc.ok) {
+          const errBody = await rc.json().catch(() => ({}));
+          throw new Error(errBody.error || 'Unable to fetch channels.');
+        }
+        const data = await rc.json();
+        channelsEl.innerHTML = '';
+        data.channels.forEach(ch => {
+          const opt = document.createElement('option');
+          opt.value = ch.id;
+          opt.textContent = ch.name;
+          channelsEl.appendChild(opt);
+        });
 
       if (cfg) {
         channelsEl.value = cfg.channelId;
@@ -137,6 +176,10 @@
 
     saveBtn.onclick = async () => {
       if (!selectedGuild) return;
+      if (!selectedGuild.installed) {
+        renderStatus('warning', 'Invite the bot first', 'Add AutoBump to this server to configure schedules.');
+        return;
+      }
       const body = {
         guildId: selectedGuild.id,
         channelId: channelsEl.value,
@@ -149,7 +192,7 @@
       if (data.ok) {
         selectedConfig = data.config;
         renderStatus('success', 'Schedule saved!', 'Your bump schedule is active and will use the external /bump command.');
-        bumpBtn.disabled = false;
+        bumpBtn.disabled = !channelsEl.value;
       } else {
         renderStatus('error', 'Save failed', data.error || 'Please try again.');
       }
@@ -157,6 +200,10 @@
 
     removeBtn.onclick = async () => {
       if (!selectedGuild) return;
+      if (!selectedGuild.installed) {
+        renderStatus('warning', 'Invite the bot first', 'Add AutoBump before managing automation for this server.');
+        return;
+      }
       renderStatus('info', 'Removing schedule…');
       const r = await fetch('/api/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guildId: selectedGuild.id }) });
       const data = await r.json();
@@ -171,6 +218,15 @@
 
     bumpBtn.onclick = async () => {
       if (!selectedGuild) return;
+      if (!selectedGuild.installed) {
+        renderStatus('warning', 'Invite the bot first', 'Add AutoBump so we can relay the /bump command.');
+        return;
+      }
+      const selectedChannel = channelsEl.value;
+      if (!selectedChannel) {
+        renderStatus('error', 'Channel required', 'Choose the channel you would like to send /bump in.');
+        return;
+      }
       renderStatus('info', 'Triggering bump…', 'We are relaying the /bump command to the partner bot.');
       try {
         const r = await fetch('/api/bump', {

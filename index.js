@@ -61,12 +61,97 @@ function saveConfig() {
 const client = new Client({
   intents: [GatewayIntentBits.Guilds], // no message content needed
 });
+let resolveReady;
+const readyPromise = new Promise((resolve) => {
+  resolveReady = resolve;
+});
+
+let latestSessionId = null;
+let resolveSessionReady;
+const sessionReadyPromise = new Promise((resolve) => {
+  resolveSessionReady = resolve;
+});
+
+function markSessionReady(sessionId) {
+  if (!sessionId) return;
+  latestSessionId = sessionId;
+  resolveSessionReady?.(sessionId);
+  resolveSessionReady = null;
+}
+function ensureClientReady() {
+  if (client.isReady()) return Promise.resolve();
+  return readyPromise;
+}
+
+async function ensureGatewaySession() {
+  await ensureClientReady();
+  if (latestSessionId) return latestSessionId;
+  const immediate = client.ws.shards.first()?.sessionId ?? null;
+  if (immediate) {
+    markSessionReady(immediate);
+    return immediate;
+  }
+  const awaited = await sessionReadyPromise;
+  if (awaited) return awaited;
+  throw new Error("Bot gateway session not ready yet");
+}
 
 // Schedule management
 const intervals = new Map();
 const bumpCommandCache = new Map();
 
+function normalizeDiscordError(err, fallbackStatus = 500) {
+  if (!err) {
+    return { status: fallbackStatus, message: "Unknown error" };
+  }
+
+  const message =
+    err?.rawError?.message || err?.message || "An unexpected Discord error occurred.";
+
+  if (typeof err.status === "number") {
+    return { status: err.status, message };
+  }
+
+  // Map common Discord API error codes to HTTP-ish responses
+  switch (err.code) {
+    case 50001: // Missing Access
+    case 50013: // Missing Permissions
+      return { status: 403, message };
+    case 10003: // Unknown Channel
+    case 10004: // Unknown Guild
+      return { status: 404, message };
+    default:
+      return { status: fallbackStatus, message };
+  }
+}
+
+async function resolveTextChannel(guildId, channelId) {
+  let guild;
+  try {
+    guild = await client.guilds.fetch(guildId);
+  } catch (err) {
+    throw new Error("Bot is not in this guild or cannot access it.");
+  }
+
+  let channel;
+  try {
+    channel = await guild.channels.fetch(channelId);
+  } catch (err) {
+    throw new Error("Unable to access the selected channel.");
+  }
+
+  if (
+    !channel ||
+    !(channel.type === ChannelType.GuildText || channel.isTextBased())
+  ) {
+    throw new Error("Selected channel is not a text channel.");
+  }
+
+  return channel;
+}
+
 async function fetchExternalBumpCommand(guildId) {
+  await ensureClientReady();
   if (!BUMP_APPLICATION_ID) {
     throw new Error("Missing BUMP_APPLICATION_ID env var");
   }
@@ -107,7 +192,11 @@ async function fetchExternalBumpCommand(guildId) {
   );
 
   if (!command) {
-    throw new Error(`Command ${BUMP_COMMAND_NAME} not found for application ${BUMP_APPLICATION_ID}`);
+    const error = new Error(
+      `Command ${BUMP_COMMAND_NAME} not found for application ${BUMP_APPLICATION_ID}`
+    );
+    error.status = 404;
+    throw error;
   }
 
   bumpCommandCache.set(guildId, command);
@@ -115,11 +204,7 @@ async function fetchExternalBumpCommand(guildId) {
 }
 
 async function executeExternalBump(guildId, channelId) {
-  const sessionId = [...client.ws.shards.values()][0]?.sessionId;
-  if (!sessionId) {
-    throw new Error("Bot gateway session not ready yet");
-  }
-
+  const sessionId = await ensureGatewaySession();
   const command = await fetchExternalBumpCommand(guildId);
 
   // discord.js Routes has no interactions() helper; use raw path
@@ -139,8 +224,23 @@ async function executeExternalBump(guildId, channelId) {
         options: [],
         attachments: [],
       },
-    },
+    }),
   });
+
+  if (!response.ok) {
+    let details = null;
+    try {
+      details = await response.json();
+    } catch (e) {
+      // ignore json parse issues
+    }
+    const error = new Error(
+      details?.message || `Discord API error ${response.status}`
+    );
+    error.status = response.status;
+    error.rawError = details;
+    throw error;
+  }
 }
 
 async function sendBump(guildId) {
@@ -173,13 +273,67 @@ function scheduleGuild(guildId) {
 // Bring up schedules on ready
 client.once(Events.ClientReady, () => {
   console.log(`Ready as ${client.user.tag}`);
+  markSessionReady(client.ws.shards.first()?.sessionId ?? null);
   Object.keys(config).forEach((gid) => scheduleGuild(gid));
+  resolveReady?.();
+});
+
+client.on(Events.ShardReady, (shardId) => {
+  markSessionReady(client.ws.shards.get(shardId)?.sessionId ?? null);
+});
+
+client.on(Events.ShardResume, (shardId) => {
+  markSessionReady(client.ws.shards.get(shardId)?.sessionId ?? null);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName === "bump") {
-    await interaction.reply("Bumped! 🚀");
+  if (interaction.commandName !== "bump") return;
+
+  if (!interaction.guildId) {
+    await interaction.reply({
+      content: "This command can only be used inside a server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const requestedChannel = interaction.options.getChannel?.("channel") ?? null;
+  const entry = config[interaction.guildId];
+  const targetChannelId = requestedChannel?.id ?? entry?.channelId ?? null;
+
+  if (!targetChannelId) {
+    await interaction.reply({
+      content:
+        "No bump channel configured for this server. Set one from the dashboard or provide a channel option.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    await ensureClientReady();
+    await resolveTextChannel(interaction.guildId, targetChannelId);
+    await executeExternalBump(interaction.guildId, targetChannelId);
+
+    await interaction.editReply({
+      content: `Triggered /${BUMP_COMMAND_NAME} in <#${targetChannelId}>!`,
+    });
+  } catch (err) {
+    console.error("Slash bump failed:", err);
+    const rawMessage = err?.rawError?.message || err?.message || "";
+    const isCooldown =
+      err?.status === 429 || /cooldown|try again/i.test(rawMessage);
+    const { message } = normalizeDiscordError(err);
+    const description = isCooldown
+      ? "Failed to execute bump command: Cooldown in effect."
+      : message || "Failed to execute bump command.";
+
+    await interaction.editReply({
+      content: description,
+    });
   }
 });
 
@@ -200,7 +354,21 @@ function loginRequired(req, res, next) {
 
 // Routes
 app.get("/", (req, res) => {
-  res.redirect("/dashboard");
+  res.render("landing", {
+    user: req.session.user || null,
+  });
+});
+
+app.get("/terms", (req, res) => {
+  res.render("terms", {
+    user: req.session.user || null,
+  });
+});
+
+app.get("/privacy", (req, res) => {
+  res.render("privacy", {
+    user: req.session.user || null,
+  });
 });
 
 app.get("/login", (req, res) => {
@@ -266,6 +434,7 @@ app.get("/dashboard", loginRequired, (req, res) => {
 // API: list manageable guilds; include whether bot is present and an invite URL
 app.get("/api/guilds", loginRequired, async (req, res) => {
   try {
+    await ensureClientReady();
     // user guilds from session (has owner/permissions info)
     const userGuilds = req.session.guilds || [];
     // bot guilds
@@ -298,7 +467,8 @@ app.get("/api/guilds", loginRequired, async (req, res) => {
     res.json({ guilds: manageable, config });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "failed" });
+    const { status, message } = normalizeDiscordError(e);
+    res.status(status).json({ error: message });
   }
 });
 
@@ -307,6 +477,7 @@ app.get("/api/channels", loginRequired, async (req, res) => {
   const guildId = req.query.guild_id;
   if (!guildId) return res.status(400).json({ error: "guild_id required" });
   try {
+    await ensureClientReady();
     const guild = await client.guilds.fetch(guildId);
     const channels = await guild.channels.fetch();
     const textChannels = channels
@@ -317,7 +488,8 @@ app.get("/api/channels", loginRequired, async (req, res) => {
     res.json({ channels: textChannels });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "failed" });
+    const { status, message } = normalizeDiscordError(e);
+    res.status(status).json({ error: message });
   }
 });
 
@@ -326,6 +498,15 @@ app.post("/api/save", loginRequired, async (req, res) => {
   const { guildId, channelId, intervalMinutes, message } = req.body || {};
   if (!guildId || !channelId)
     return res.status(400).json({ error: "guildId and channelId required" });
+
+  try {
+    await ensureClientReady();
+    await resolveTextChannel(guildId, channelId);
+  } catch (err) {
+    const { status, message } = normalizeDiscordError(err, 400);
+    return res.status(status).json({ error: message });
+  }
+
   config[guildId] = {
     channelId,
     intervalMinutes:
@@ -341,6 +522,7 @@ app.post("/api/save", loginRequired, async (req, res) => {
 app.post("/api/remove", loginRequired, async (req, res) => {
   const { guildId } = req.body || {};
   if (!guildId) return res.status(400).json({ error: "guildId required" });
+  await ensureClientReady();
   delete config[guildId];
   saveConfig();
   const iv = intervals.get(guildId);
@@ -351,6 +533,7 @@ app.post("/api/remove", loginRequired, async (req, res) => {
 
 // API: trigger bump command immediately
 app.post("/api/bump", loginRequired, async (req, res) => {
+  const { guildId, channelId } = req.body || {};
   const { guildId, channelId } = req.body || {};
   if (!guildId) return res.status(400).json({ error: "guildId required" });
 
@@ -365,6 +548,7 @@ app.post("/api/bump", loginRequired, async (req, res) => {
     await executeExternalBump(guildId, effectiveChannelId);
     res.json({ ok: true, message: "Bump command executed successfully!" });
   } catch (err) {
+    console.error("Manual bump failed:", err);
     const rawMessage = err?.rawError?.message || err?.message || "";
     const isCooldown = /cooldown|please wait/i.test(rawMessage);
     const description = isCooldown
@@ -373,7 +557,9 @@ app.post("/api/bump", loginRequired, async (req, res) => {
     res.status(isCooldown ? 200 : 500).json({
       ok: false,
       cooldown: isCooldown,
+      error: message,
       embed: {
+        title: isCooldown ? "Cooldown Active" : "Bump command failed",
         title: isCooldown ? "Cooldown Active" : "Bump command failed",
         description,
       },
