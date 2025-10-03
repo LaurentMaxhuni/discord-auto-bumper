@@ -76,24 +76,30 @@ async function fetchExternalBumpCommand(guildId) {
   }
 
   let commands = [];
-  try {
-    commands = await client.rest.get(
-      Routes.applicationGuildCommands(BUMP_APPLICATION_ID, guildId)
-    );
-  } catch (err) {
-    if (err.status !== 404) {
-      console.error("Failed to fetch guild commands", err);
-      throw err;
+  async function tryGet(route, rawUrl) {
+    try {
+      return await client.rest.get(route);
+    } catch (err) {
+      // Fallback to unauthenticated fetch if the REST helper refuses the route
+      try {
+        const res = await fetch(rawUrl);
+        if (res.ok) return await res.json();
+      } catch (_) {}
+      if (err?.status && err.status !== 404) throw err;
+      return [];
     }
   }
 
+  // Try guild-scoped first, then global
+  commands = await tryGet(
+    Routes.applicationGuildCommands(BUMP_APPLICATION_ID, guildId),
+    `${API_BASE}/applications/${BUMP_APPLICATION_ID}/guilds/${guildId}/commands`
+  );
   if (!commands?.length) {
-    try {
-      commands = await client.rest.get(Routes.applicationCommands(BUMP_APPLICATION_ID));
-    } catch (err) {
-      console.error("Failed to fetch global commands", err);
-      throw err;
-    }
+    commands = await tryGet(
+      Routes.applicationCommands(BUMP_APPLICATION_ID),
+      `${API_BASE}/applications/${BUMP_APPLICATION_ID}/commands`
+    );
   }
 
   const command = commands.find(
@@ -116,13 +122,15 @@ async function executeExternalBump(guildId, channelId) {
 
   const command = await fetchExternalBumpCommand(guildId);
 
-  await client.rest.post(Routes.interactions(), {
+  // discord.js Routes has no interactions() helper; use raw path
+  await client.rest.post("/interactions", {
     body: {
       type: 2,
       application_id: BUMP_APPLICATION_ID,
       guild_id: guildId,
       channel_id: channelId,
       session_id: sessionId,
+      nonce: `${Date.now()}`,
       data: {
         id: command.id,
         type: command.type,
@@ -255,7 +263,7 @@ app.get("/dashboard", loginRequired, (req, res) => {
   });
 });
 
-// API: list manageable guilds where the bot is present
+// API: list manageable guilds; include whether bot is present and an invite URL
 app.get("/api/guilds", loginRequired, async (req, res) => {
   try {
     // user guilds from session (has owner/permissions info)
@@ -267,15 +275,26 @@ app.get("/api/guilds", loginRequired, async (req, res) => {
     const MANAGE_GUILD = 0x20;
     const manageable = userGuilds
       .filter(
-        (g) =>
-          botGuildIds.has(g.id) &&
-          (g.owner || (g.permissions & MANAGE_GUILD) === MANAGE_GUILD)
+        (g) => g.owner || (g.permissions & MANAGE_GUILD) === MANAGE_GUILD
       )
-      .map((g) => ({
-        id: g.id,
-        name: g.name,
-        icon: g.icon,
-      }));
+      .map((g) => {
+        const hasBot = botGuildIds.has(g.id);
+        // Minimal permissions: View Channels (1024), Send Messages (2048), Read Message History (65536), Use Application Commands (2147483648)
+        const perms = 1024 + 2048 + 65536 + 2147483648;
+        const url = new URL(OAUTH_AUTHORIZE);
+        url.searchParams.set("client_id", CLIENT_ID);
+        url.searchParams.set("scope", "bot applications.commands");
+        url.searchParams.set("permissions", String(perms));
+        url.searchParams.set("guild_id", g.id);
+        url.searchParams.set("disable_guild_select", "true");
+        return {
+          id: g.id,
+          name: g.name,
+          icon: g.icon,
+          hasBot,
+          inviteUrl: url.toString(),
+        };
+      });
     res.json({ guilds: manageable, config });
   } catch (e) {
     console.error(e);
@@ -332,36 +351,49 @@ app.post("/api/remove", loginRequired, async (req, res) => {
 
 // API: trigger bump command immediately
 app.post("/api/bump", loginRequired, async (req, res) => {
-  const { guildId } = req.body || {};
+  const { guildId, channelId } = req.body || {};
   if (!guildId) return res.status(400).json({ error: "guildId required" });
 
-  const entry = config[guildId];
-  if (!entry?.channelId) {
+  const effectiveChannelId = channelId || config[guildId]?.channelId;
+  if (!effectiveChannelId) {
     return res
       .status(400)
-      .json({ error: "No channel configured for this guild." });
+      .json({ error: "No channel provided or configured for this guild." });
   }
 
   try {
-    await executeExternalBump(guildId, entry.channelId);
+    await executeExternalBump(guildId, effectiveChannelId);
     res.json({ ok: true, message: "Bump command executed successfully!" });
   } catch (err) {
     const rawMessage = err?.rawError?.message || err?.message || "";
-    const isCooldown = /cooldown/i.test(rawMessage);
+    const isCooldown = /cooldown|please wait/i.test(rawMessage);
     const description = isCooldown
       ? "Failed to execute bump command: Cooldown in effect."
-      : "Failed to execute bump command.";
+      : `Failed to execute bump command.${rawMessage ? ` ${rawMessage}` : ""}`;
     res.status(isCooldown ? 200 : 500).json({
       ok: false,
       cooldown: isCooldown,
       embed: {
-        title: isCooldown
-          ? "Cooldown Active"
-          : "Bump command failed",
+        title: isCooldown ? "Cooldown Active" : "Bump command failed",
         description,
       },
     });
   }
+});
+
+// Optional helper to redirect to a crafted bot invite URL
+app.get("/invite", loginRequired, (req, res) => {
+  const { guild_id } = req.query;
+  const perms = 1024 + 2048 + 65536 + 2147483648;
+  const url = new URL(OAUTH_AUTHORIZE);
+  url.searchParams.set("client_id", CLIENT_ID);
+  url.searchParams.set("scope", "bot applications.commands");
+  url.searchParams.set("permissions", String(perms));
+  if (guild_id) {
+    url.searchParams.set("guild_id", String(guild_id));
+    url.searchParams.set("disable_guild_select", "true");
+  }
+  res.redirect(url.toString());
 });
 
 app.listen(Number(PORT), () => {

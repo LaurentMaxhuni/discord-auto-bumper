@@ -84,8 +84,26 @@
       data.guilds.forEach(g => {
         const div = document.createElement('div');
         div.className = 'guild';
-        div.innerHTML = '<span>' + (g.name || g.id) + '</span>';
-        div.onclick = () => selectGuild(g, data.config[g.id]);
+        const title = document.createElement('span');
+        title.textContent = g.name || g.id;
+        div.appendChild(title);
+
+        if (g.hasBot) {
+          div.title = 'Configure this server';
+          div.onclick = () => selectGuild(g, data.config[g.id]);
+        } else {
+          const btn = document.createElement('a');
+          btn.textContent = 'Invite Bot';
+          btn.href = g.inviteUrl || ('/invite?guild_id=' + encodeURIComponent(g.id));
+          btn.target = '_blank';
+          btn.rel = 'noopener';
+          btn.className = 'accent';
+          btn.style.marginTop = '8px';
+          div.appendChild(btn);
+          div.style.opacity = '0.85';
+          div.style.cursor = 'default';
+        }
+
         guildsEl.appendChild(div);
       });
     }
@@ -113,7 +131,8 @@
         messageEl.value = cfg.message || 'Bumped! 🚀';
       }
 
-      bumpBtn.disabled = !(cfg && cfg.channelId);
+      // Enable manual trigger for the selected channel even if not saved
+      bumpBtn.disabled = channelsEl.options.length === 0;
     }
 
     saveBtn.onclick = async () => {
@@ -143,7 +162,7 @@
       const data = await r.json();
       if (data.ok) {
         selectedConfig = null;
-        bumpBtn.disabled = true;
+        bumpBtn.disabled = channelsEl.options.length === 0;
         renderStatus('success', 'Schedule removed', 'Automation is turned off for this server.');
       } else {
         renderStatus('error', 'Removal failed', data.error || 'Please try again.');
@@ -157,7 +176,7 @@
         const r = await fetch('/api/bump', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ guildId: selectedGuild.id })
+          body: JSON.stringify({ guildId: selectedGuild.id, channelId: channelsEl.value })
         });
         const data = await r.json();
         if (data.ok) {
