@@ -224,23 +224,8 @@ async function executeExternalBump(guildId, channelId) {
         options: [],
         attachments: [],
       },
-    }),
+    },
   });
-
-  if (!response.ok) {
-    let details = null;
-    try {
-      details = await response.json();
-    } catch (e) {
-      // ignore json parse issues
-    }
-    const error = new Error(
-      details?.message || `Discord API error ${response.status}`
-    );
-    error.status = response.status;
-    error.rawError = details;
-    throw error;
-  }
 }
 
 async function sendBump(guildId) {
