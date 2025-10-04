@@ -164,14 +164,26 @@
           channelsEl.appendChild(opt);
         });
 
-      if (cfg) {
-        channelsEl.value = cfg.channelId;
-        intervalEl.value = cfg.intervalMinutes || 120;
-        messageEl.value = cfg.message || 'Bumped! 🚀';
-      }
+        if (cfg) {
+          channelsEl.value = cfg.channelId;
+          intervalEl.value = cfg.intervalMinutes || 120;
+          messageEl.value = cfg.message || 'Bumped! 🚀';
+        } else {
+          channelsEl.value = channelsEl.options[0]?.value || '';
+          intervalEl.value = 120;
+          messageEl.value = 'Bumped! 🚀';
+        }
 
-      // Enable manual trigger for the selected channel even if not saved
-      bumpBtn.disabled = channelsEl.options.length === 0;
+        clearStatus();
+      } catch (err) {
+        console.error(err);
+        channelsEl.innerHTML = '';
+        renderStatus('error', 'Channel load failed', err.message || 'Please try again later.');
+      } finally {
+        setConfigDisabled(false);
+        // Enable manual trigger for the selected channel even if not saved
+        bumpBtn.disabled = channelsEl.options.length === 0;
+      }
     }
 
     saveBtn.onclick = async () => {
