@@ -519,7 +519,6 @@ app.post("/api/remove", loginRequired, async (req, res) => {
 // API: trigger bump command immediately
 app.post("/api/bump", loginRequired, async (req, res) => {
   const { guildId, channelId } = req.body || {};
-  const { guildId, channelId } = req.body || {};
   if (!guildId) return res.status(400).json({ error: "guildId required" });
 
   const effectiveChannelId = channelId || config[guildId]?.channelId;
@@ -536,17 +535,16 @@ app.post("/api/bump", loginRequired, async (req, res) => {
     console.error("Manual bump failed:", err);
     const rawMessage = err?.rawError?.message || err?.message || "";
     const isCooldown = /cooldown|please wait/i.test(rawMessage);
-    const description = isCooldown
+    const errorMessage = isCooldown
       ? "Failed to execute bump command: Cooldown in effect."
       : `Failed to execute bump command.${rawMessage ? ` ${rawMessage}` : ""}`;
     res.status(isCooldown ? 200 : 500).json({
       ok: false,
       cooldown: isCooldown,
-      error: message,
+      error: errorMessage,
       embed: {
         title: isCooldown ? "Cooldown Active" : "Bump command failed",
-        title: isCooldown ? "Cooldown Active" : "Bump command failed",
-        description,
+        description: errorMessage,
       },
     });
   }
